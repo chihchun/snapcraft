@@ -227,21 +227,36 @@ class KernelPlugin(kbuild.KBuildPlugin):
             'INSTALL_FW_PATH={}'.format(
                 os.path.join(self.installdir, 'lib', 'firmware'))]
 
+    def _unsquashfs_generic_initrd(self, temp_dir, initrd_path):
+        
+        subprocess.check_call([
+            'unsquashfs', self.os_snap, os.path.dirname(initrd_path)],
+            cwd=temp_dir)
+
+        tmp_initrd_path = os.path.join(
+            temp_dir, 'squashfs-root', initrd_path)
+
+        if not os.path.exists(tmp_initrd_path):
+            raise IOError("file does not exist")
+
+        return tmp_initrd_path
+
     def _unpack_generic_initrd(self):
-        initrd_path = os.path.join(
-            'usr', 'lib', 'ubuntu-core-generic-initrd', 'initrd.img-core')
         initrd_unpacked_path = os.path.join(self.builddir, 'initrd-staging')
         if os.path.exists(initrd_unpacked_path):
             shutil.rmtree(initrd_unpacked_path)
         os.makedirs(initrd_unpacked_path)
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            subprocess.check_call([
-                'unsquashfs', self.os_snap, os.path.dirname(initrd_path)],
-                cwd=temp_dir)
-
-            tmp_initrd_path = os.path.join(
-                temp_dir, 'squashfs-root', initrd_path)
+            try:
+                tmp_initrd_path = self._unsquashfs_generic_initrd(temp_dir, os.path.join(
+                    'usr', 'lib', 'ubuntu-core-generic-initrd', 'initrd.img-core'))
+            except IOError:
+                shutil.rmtree(temp_dir)
+                os.makedirs(temp_dir)
+                tmp_initrd_path = self._unsquashfs_generic_initrd(temp_dir, os.path.join(
+                    'boot', 'initrd.img-core'))
+                pass
 
             mime_detector = magic.open(
                 magic.MAGIC_MIME_TYPE | magic.MAGIC_ERROR)
